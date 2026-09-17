@@ -1,0 +1,22 @@
+## {{ scene }}
+
+**适用场景**：{{ scene }}
+
+**操作步骤**：
+{% for step in steps %}
+{{ loop.index }}. {{ step }}
+{% endfor %}
+
+**为什么有效**：{{ why_works }}
+
+**适用条件**：
+{% for condition in conditions %}
+- {{ condition }}
+{% endfor %}
+
+**验证次数**：{{ count }} 次
+
+**来源日志**：
+{% for log in source_logs %}
+- {{ log }}
+{% endfor %}

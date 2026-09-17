@@ -1,0 +1,22 @@
+## {{ date }} | {{ target }}
+
+**优化目标**：{{ target }}
+
+**当前做法**：{{ current }}
+
+**建议做法**：{{ proposed }}
+
+**预期收益**：
+{% for benefit in expected_benefit %}
+- {{ benefit }}
+{% endfor %}
+
+**风险评估**：{{ risk_assessment }}
+
+**支撑依据**：
+{% for evidence_item in evidence %}
+- {{ evidence_item }}
+{% endfor %}
+
+**状态**：{{ status | default('待审批') }}
+**审批人**：{{ approver | default('待人工确认') }}

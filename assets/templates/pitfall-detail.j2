@@ -1,0 +1,19 @@
+## {{ date }} | {{ scene }}
+
+**错误场景**：{{ scene }}
+
+**错误信息**：
+
+```
+{{ error_msg }}
+```
+
+**原因分析**：{{ root_cause }}
+
+**解决方案**：{{ solution }}
+
+**预防建议**：{{ prevention }}
+{% if high_frequency %}
+
+⚠️ **高频坑**（同类错误已出现 {{ frequency }} 次）
+{% endif %}

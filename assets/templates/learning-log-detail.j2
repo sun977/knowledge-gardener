@@ -1,0 +1,23 @@
+## {{ date }} | {{ task_type }}
+
+**任务概要**：{{ task_summary }}
+
+**执行回顾**：
+{{ execution_review }}
+
+**做得好的**：
+{% for point in good_points %}
+- {{ point }}
+{% endfor %}
+
+**可以改进的**：
+{% for improvement in improvements %}
+- {{ improvement }}
+{% endfor %}
+
+{% if linked_docs %}
+**关联文档**：
+{% for doc in linked_docs %}
+- {{ doc }}
+{% endfor %}
+{% endif %}
