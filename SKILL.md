@@ -5,7 +5,7 @@ description: 灵猫知识库自治维护工具。用于Agent自主更新学城�
 metadata:
   skillhub.creator: "sunhaobo05"
   skillhub.updater: "sunhaobo05"
-  skillhub.version: "V3.0.0"
+  skillhub.version: "V3.1.0"
 ---
 
 # LingCat Knowledge Gardener
@@ -207,19 +207,24 @@ main(
     coverage_rows: list[dict],
     experience_scenes: list[str],
     tree_docs: list[dict] = None,     # 可选：线上目录树全量遍历，传了才启用结构检查
-    index_c_docs: list[dict] = None,  # 可选：索引C 登记数据（含显式 is_facade 字段）
+    index_c: dict = None,             # 可选（推荐）：索引C 原始 JSON，脚本内部自动展平
+    index_c_docs: list[dict] = None,  # 可选：手工展平的索引C 登记数据，与 index_c 取并集
     facade_threshold: int = 5,        # 可选：C3 域门面阈值（可配 3~8）
     whitelist: set = None,            # 可选：C1 白名单，缺省为 6 个治理文档 contentId
 ) -> dict
 ```
 
-`tree_docs` 与 `index_c_docs` 同时传入时额外执行三项结构一致性检查
+`tree_docs` 与 `index_c`（或 `index_c_docs`）同时传入时额外执行三项结构一致性检查
 （C1 悬挂节点 / C2 path 失配 / C3 域门面阈值），返回 dict 中新增
 `structure_check` section；不传则行为与旧版本完全一致。C3 统计时自动
 豁免治理目录（`00-知识库元信息` / `06-Agent自建知识`，脚本内置常量
 `GOVERNANCE_DIRS`），只关注业务目录的域膨胀；该豁免不影响 C1/C2。采集方式：Agent 用
-`getChildContent` 从根 2775934808 递归遍历目录树得到 `tree_docs`，用
-`getDocumentXml` 拉索引C（2787258250）解析 JSON 得到 `index_c_docs`。
+`getChildContent` 从根 2775934808 递归遍历目录树得到 `tree_docs`
+（`path` 约定为所在目录链、**不含文档名**；若遍历时把文档名拼进了 `path`，
+脚本入口会按 title 自动剥离，但建议采集时就按契约构造），用
+`getDocumentXml` 拉索引C（2787258250）解析 JSON 后**整体作为 `index_c` 传入**
+（脚本内部自动展平 root/categories/docs；不要手工只展平 docs，否则会漏掉
+categories 级登记的目录容器 contentId，导致 C1 把 01~06 目录容器误报为悬挂节点）。
 脚本只报告、不自动修复，修复走三步走并需用户确认。
 
 ### migrate_to_business.py

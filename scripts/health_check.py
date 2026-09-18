@@ -185,6 +185,40 @@ def check_redundancy(scenes: list) -> list:
     return issues
 
 
+def _flatten_index_c(index_c: dict) -> list:
+    """把索引C 原始 JSON 展平为检查用的登记条目列表。
+
+    索引C 是两级结构：categories[*].contentId 登记目录容器，
+    categories[*].docs[*] 登记叶子内容文档。两类都算"已登记"，
+    必须一并展平，否则目录容器会被 C1 误判为悬挂节点。
+    """
+    entries = []
+    root = index_c.get("root") or {}
+    if root.get("contentId"):
+        entries.append({"contentId": root["contentId"], "path": ""})
+    for cat in index_c.get("categories") or []:
+        if cat.get("contentId"):
+            entries.append({"contentId": cat["contentId"], "path": ""})
+        entries.extend(cat.get("docs") or [])
+    return entries
+
+
+def _normalize_tree_docs(tree_docs: list) -> list:
+    """对齐 tree_docs 的 path 口径为"目录链（不含文档名）"。
+
+    遍历目录树时容易把文档名拼进 path（如 '01-xxx/[01]yyy'），
+    而索引C 的 path 不含文档名，两边直接比对会造成 C2 全部误报。
+    这里用 title 判定：末段等于文档标题才剥离（说明是文档名），
+    否则视为真实子目录原样保留——两种口径的输入都安全。
+    在 main() 入口归一化一次，C1/C2/C3 共用同一份干净数据。
+    """
+    for doc in tree_docs:
+        parts = [p for p in str(doc.get("path") or "").replace("\\", "/").split("/") if p]
+        if parts and parts[-1] == str(doc.get("title") or ""):
+            doc["path"] = "/".join(parts[:-1])
+    return tree_docs
+
+
 def check_hanging_nodes(tree_docs: list, index_c_docs: list,
                         whitelist: set = None) -> list:
     """C1 悬挂节点：线上目录树存在、但索引C 未登记的文档。
@@ -292,6 +326,7 @@ def main(
     now: datetime = None,
     tree_docs: list = None,
     index_c_docs: list = None,
+    index_c: dict = None,
     facade_threshold: int = DEFAULT_FACADE_THRESHOLD,
     whitelist: set = None,
 ) -> dict:
@@ -302,8 +337,14 @@ def main(
         （前五个参数为现有内容健康检查，语义不变）
         tree_docs: 可选，线上目录树全量遍历结果
             [{'contentId':..., 'title':..., 'path': '01-xxx/子目录'}, ...]
-        index_c_docs: 可选，索引C 登记数据
+            path 约定为所在目录链（不含文档名）；若遍历时把文档名拼进了
+            path（末段等于 title），main() 入口会自动剥离，两种口径都安全。
+        index_c_docs: 可选，索引C 登记数据（手工展平后的列表）
             [{'contentId':..., 'path':..., 'is_facade': bool（缺省 False）}, ...]
+        index_c: 可选，索引C 原始 JSON（getDocumentXml 解析后的完整结构，
+            含 root/categories/docs 两级）。优先推荐传这个：脚本内部自动
+            展平 root、categories 与 docs，避免手工展平漏掉目录容器。
+            与 index_c_docs 同时传入时取并集（按 contentId 去重）。
         facade_threshold: C3 域门面文档数阈值，默认 5（可配 3~8）
         whitelist: C1 白名单 contentId 集合，缺省为 6 个治理文档
 
@@ -330,6 +371,16 @@ def main(
         }
     """
     now = now or datetime.now()
+
+    if index_c is not None:
+        flattened = _flatten_index_c(index_c)
+        if index_c_docs:
+            seen = {str(d.get("contentId")) for d in flattened}
+            flattened.extend(
+                d for d in index_c_docs if str(d.get("contentId")) not in seen
+            )
+        index_c_docs = flattened
+
     issues = []
     issues += check_stale_version_log(version_log_rows, now)
     issues += check_dead_links(pending_rows + coverage_rows, existing_content_ids)
@@ -339,6 +390,7 @@ def main(
 
     structure_check = None
     if tree_docs is not None and index_c_docs is not None:
+        tree_docs = _normalize_tree_docs(tree_docs)
         hanging_nodes = check_hanging_nodes(tree_docs, index_c_docs, whitelist)
         path_mismatches = check_path_mismatch(tree_docs, index_c_docs)
         facade_candidates = check_facade_candidates(
