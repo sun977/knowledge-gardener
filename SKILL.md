@@ -5,7 +5,7 @@ description: 灵猫知识库自治维护工具。用于Agent自主更新学城�
 metadata:
   skillhub.creator: "sunhaobo05"
   skillhub.updater: "sunhaobo05"
-  skillhub.version: "V2.2.0"
+  skillhub.version: "V3.0.0"
 ---
 
 # LingCat Knowledge Gardener
@@ -258,5 +258,5 @@ main(
 - 不在没有用户确认的情况下调用 `write_experience.py` / `propose_optimization.py` /
   `write_pending_review.py`（这三者都需要人工确认才触发）
 - 不做语义级矛盾检测（`health_check.py` 目前只做字符串完全匹配的冗余检测，
-  复杂度与当前收益不匹配，留到 v2.0）
+  复杂度与当前收益不匹配，留到后续版本评估）
 - 不用 `<km-markdown>` 标签直接回写学城文档
