@@ -5,7 +5,7 @@ description: 灵猫知识库自治维护工具。用于Agent自主更新学城�
 metadata:
   skillhub.creator: "sunhaobo05"
   skillhub.updater: "sunhaobo05"
-  skillhub.version: "V2.1.0"
+  skillhub.version: "V2.2.0"
 ---
 
 # LingCat Knowledge Gardener
@@ -202,8 +202,21 @@ main(
     pending_rows: list[dict],
     coverage_rows: list[dict],
     experience_scenes: list[str],
+    tree_docs: list[dict] = None,     # 可选：线上目录树全量遍历，传了才启用结构检查
+    index_c_docs: list[dict] = None,  # 可选：索引C 登记数据（含显式 is_facade 字段）
+    facade_threshold: int = 5,        # 可选：C3 域门面阈值（可配 3~8）
+    whitelist: set = None,            # 可选：C1 白名单，缺省为 6 个治理文档 contentId
 ) -> dict
 ```
+
+`tree_docs` 与 `index_c_docs` 同时传入时额外执行三项结构一致性检查
+（C1 悬挂节点 / C2 path 失配 / C3 域门面阈值），返回 dict 中新增
+`structure_check` section；不传则行为与旧版本完全一致。C3 统计时自动
+豁免治理目录（`00-知识库元信息` / `06-Agent自建知识`，脚本内置常量
+`GOVERNANCE_DIRS`），只关注业务目录的域膨胀；该豁免不影响 C1/C2。采集方式：Agent 用
+`getChildContent` 从根 2775934808 递归遍历目录树得到 `tree_docs`，用
+`getDocumentXml` 拉索引C（2787258250）解析 JSON 得到 `index_c_docs`。
+脚本只报告、不自动修复，修复走三步走并需用户确认。
 
 ### migrate_to_business.py
 
