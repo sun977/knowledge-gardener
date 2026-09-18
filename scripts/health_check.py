@@ -2,7 +2,9 @@
 知识库健康度巡检（不走 lib/writer.py，因为这是"读取并分析"而非"写入新内容"）。
 
 用途：定期（建议每周）巡检 06-Agent自建知识 各文档，发现过期、死链、冗余、
-积压等问题，生成巡检报告后通过 write_learning_log.py 写入学习日志。
+积压等问题，生成巡检报告后由 Agent 将返回的 version_log_entry 追加到
+00-知识库元信息 的版本日志表（一次巡检一行，内容简写），问题明细在会话内
+向用户报告。不再通过 write_learning_log.py 写入 [01]学习日志。
 
 数据来源：本脚本不直接访问网络，所有输入数据（各文档的索引表行、版本日志等）
 由 Agent 先通过 citadel CLI（getDocumentXml / getSimpleMarkdown）拉取，
@@ -20,6 +22,7 @@ BACKLOG_DAYS = 14         # 待审核积压阈值
 COVERAGE_STALE_DAYS = 60  # 待补充项过期阈值
 
 DEFAULT_FACADE_THRESHOLD = 5  # C3 域门面文档数阈值（可配 3~8）
+MAX_LOG_TARGETS = 5           # 版本日志巡检行最多列出的问题定位数，超出写“等 N 处”
 
 # C1 悬挂节点检查的治理文档白名单：索引体系自身的文档，不要求在索引C 登记。
 # 注意：placeholder 占位文档不在此列——它们已在索引C 登记（status=placeholder），
@@ -70,7 +73,8 @@ def check_stale_version_log(version_log_rows: list, now: datetime = None) -> lis
     now = now or datetime.now()
     dates = [d for d in (_parse_date(r.get("date")) for r in version_log_rows) if d]
     if not dates:
-        return [{"item": "内容过期", "severity": "警告", "detail": "版本日志为空或日期缺失"}]
+        return [{"item": "内容过期", "severity": "警告",
+                 "target": "00版本日志", "detail": "版本日志为空或日期缺失"}]
 
     latest = max(dates)
     if now - latest > timedelta(days=STALE_DAYS):
@@ -78,6 +82,7 @@ def check_stale_version_log(version_log_rows: list, now: datetime = None) -> lis
             {
                 "item": "内容过期",
                 "severity": "警告",
+                "target": "00版本日志",
                 "detail": f"版本日志最近一次更新为 {latest.strftime('%Y-%m-%d')}，"
                 f"已超过 {STALE_DAYS} 天未更新",
             }
@@ -100,6 +105,7 @@ def check_dead_links(rows: list, existing_content_ids: set) -> list:
                 {
                     "item": "关键词失效",
                     "severity": "错误",
+                    "target": f"《{row.get('summary', '未命名')}》(引用 {cid})",
                     "detail": f"记录《{row.get('summary', '未命名')}》引用的 contentId "
                     f"{cid} 不存在",
                 }
@@ -124,6 +130,7 @@ def check_pending_review_backlog(pending_rows: list, now: datetime = None) -> li
                 {
                     "item": "待审核积压",
                     "severity": "警告",
+                    "target": f"《{row.get('content_summary', '未命名')}》",
                     "detail": f"《{row.get('content_summary', '未命名')}》自 "
                     f"{row.get('date')} 起待审批已超过 {BACKLOG_DAYS} 天",
                 }
@@ -148,6 +155,7 @@ def check_coverage_gap(coverage_rows: list, now: datetime = None) -> list:
                 {
                     "item": "覆盖率",
                     "severity": "警告",
+                    "target": f"《{row.get('summary', '未命名')}》",
                     "detail": f"《{row.get('summary', '未命名')}》待补充状态已超过 "
                     f"{COVERAGE_STALE_DAYS} 天",
                 }
@@ -170,6 +178,7 @@ def check_redundancy(scenes: list) -> list:
                 {
                     "item": "冗余检测",
                     "severity": "警告",
+                    "target": f"「{scene}」",
                     "detail": f"场景「{scene}」在索引表中出现 {cnt} 次，可能是重复记录",
                 }
             )
@@ -304,9 +313,15 @@ def main(
     Returns:
         {
             'success': True,
-            'report_summary': str,          # 一句话摘要（供学习日志 task_summary 使用）
-            'report_detail': str,           # 详细报告（供学习日志 execution_review 使用）
+            'report_summary': str,          # 一句话摘要（供会话内向用户报告）
+            'report_detail': str,           # 问题明细（供会话内向用户展示）
             'issues': list,                 # 结构化问题列表
+            'version_log_entry': {          # 版本日志巡检行，追加到 00-知识库元信息
+                'version': '巡检',          # 版本日志表（一次巡检一行，内容简写）
+                'date': 'YYYY-MM-DD',
+                'change': '巡检：0错误2警告，问题：定位；…（无问题则为「未发现问题」）',
+                'maintainer': 'Agent',
+            },
             'structure_check': {            # 仅结构检查启用时存在
                 'hanging_nodes': list,      # C1 悬挂节点
                 'path_mismatch': list,      # C2 path 失配
@@ -333,6 +348,7 @@ def main(
             issues.append({
                 "item": "悬挂节点",
                 "severity": "错误",
+                "target": f"《{h['title']}》({h['contentId']})",
                 "detail": f"文档《{h['title']}》(contentId {h['contentId']}) 实际位于 "
                           f"「{h['path'] or '根目录'}」，但未在索引C 登记。"
                           f"{h['suggestion']}",
@@ -341,6 +357,7 @@ def main(
             issues.append({
                 "item": "path失配",
                 "severity": "错误",
+                "target": f"《{m['title']}》({m['contentId']})",
                 "detail": f"文档《{m['title']}》(contentId {m['contentId']}) 索引C "
                           f"记录路径为「{m['index_path'] or '根目录'}」，实际路径为 "
                           f"「{m['actual_path'] or '根目录'}」。{m['suggestion']}",
@@ -349,6 +366,7 @@ def main(
             issues.append({
                 "item": "域门面建议",
                 "severity": "警告",
+                "target": f"「{fc['path']}」",
                 "detail": f"子树「{fc['path']}」已有 {fc['doc_count']} 篇文档（阈值 "
                           f"{facade_threshold}），但尚未建域门面导读页。"
                           f"{fc['suggestion']}",
@@ -365,11 +383,28 @@ def main(
     lines = [f"- 【{i['severity']}】{i['item']}：{i['detail']}" for i in issues]
     report_detail = "\n".join(lines) if lines else "未发现问题，知识库状态健康。"
 
+    # 版本日志巡检行：一次巡检一行，列出每个问题的具体定位（最多
+    # MAX_LOG_TARGETS 条，超出写“等 N 处”；明细在会话内完整报告）
+    locators = [f"{i['item']}：{i.get('target', '')}" for i in issues]
+    change = f"巡检：{error_count}错误{warning_count}警告"
+    if locators:
+        change += "，" + "；".join(locators[:MAX_LOG_TARGETS])
+        if len(locators) > MAX_LOG_TARGETS:
+            change += f"等{len(locators)}处"
+    else:
+        change += "，未发现问题"
+
     result = {
         "success": True,
         "report_summary": f"知识库巡检：发现 {error_count} 个错误、{warning_count} 个警告",
         "report_detail": report_detail,
         "issues": issues,
+        "version_log_entry": {
+            "version": "巡检",
+            "date": now.strftime("%Y-%m-%d"),
+            "change": change,
+            "maintainer": "Agent",
+        },
     }
     if structure_check is not None:
         result["structure_check"] = structure_check

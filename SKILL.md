@@ -192,8 +192,12 @@ main(
 ### health_check.py
 
 不走 `lib/writer.py`。Agent 先通过 citadel CLI 拉取各文档索引表数据并
-解析为结构化列表，再传入 `main()` 获得巡检报告，最后调用
-`write_learning_log.py` 把报告写入学习日志。
+解析为结构化列表，再传入 `main()` 获得巡检报告。报告**不写入学习日志**：
+把返回的 `version_log_entry` 追加到 00-知识库元信息 的版本日志表
+（一次巡检一行，列序沿用 版本/日期/变更内容/维护人，变更内容列出每个
+问题的具体定位，如「巡检：1错误2警告，悬挂节点：《xxx》(contentId)；
+待审核积压：《yyy》」，最多 5 条、超出写"等 N 处"），问题明细由 Agent
+在会话内向用户报告。
 
 ```python
 main(
